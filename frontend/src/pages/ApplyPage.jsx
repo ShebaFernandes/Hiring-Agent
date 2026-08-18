@@ -12,7 +12,12 @@ export default function ApplyPage() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    client.get("/jobs").then((res) => setJobs(res.data));
+    client
+      .get("/jobs")
+      .then((res) => setJobs(res.data))
+      .catch(() =>
+        setError("Couldn't load jobs. Please refresh — if this persists, the server may be down.")
+      );
   }, []);
 
   function handleChange(e) {

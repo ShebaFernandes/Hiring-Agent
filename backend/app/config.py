@@ -21,3 +21,10 @@ class Config:
 
     ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@enter.in")
     ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
+
+    # Location of the built React app (frontend/dist). In production Flask
+    # serves these files itself so the whole app is one deployable service.
+    # Defaults to ../frontend/dist relative to the backend directory.
+    FRONTEND_DIST = os.getenv(
+        "FRONTEND_DIST", os.path.join(os.path.dirname(BASE_DIR), "frontend", "dist")
+    )

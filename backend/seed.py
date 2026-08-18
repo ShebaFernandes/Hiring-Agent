@@ -2,29 +2,20 @@
 One-off seed script: creates 10 sample jobs so the apply page dropdown and
 the admin dashboard have data to show immediately.
 
+Note: the app also auto-seeds on startup when the DB is empty (see
+app/seed_data.py), so running this by hand is only needed if you want to
+force a reset.
+
 Usage:
     python seed.py            # skip if jobs already exist
     python seed.py --force    # wipe jobs + candidates and reseed
 """
 import sqlite3
 import sys
-from datetime import datetime, timezone
 
 from app.config import Config
 from app.extensions import SCHEMA
-
-SAMPLE_JOBS = [
-    {"title": "Frontend Engineer", "department": "Engineering", "location": "Bangalore", "job_type": "Full-time", "description": "Build and maintain our React-based product UI."},
-    {"title": "Backend Engineer", "department": "Engineering", "location": "Remote", "job_type": "Full-time", "description": "Design and scale our Flask/SQLite APIs."},
-    {"title": "Product Designer", "department": "Design", "location": "Mumbai", "job_type": "Full-time", "description": "Own end-to-end product design from research to polish."},
-    {"title": "Data Analyst", "department": "Data", "location": "Remote", "job_type": "Full-time", "description": "Turn raw data into actionable business insights."},
-    {"title": "DevOps Engineer", "department": "Engineering", "location": "Pune", "job_type": "Full-time", "description": "Own CI/CD pipelines and cloud infrastructure."},
-    {"title": "QA Engineer", "department": "Engineering", "location": "Hyderabad", "job_type": "Full-time", "description": "Build automated test suites and ensure release quality."},
-    {"title": "Marketing Intern", "department": "Marketing", "location": "Remote", "job_type": "Internship", "description": "Support campaigns across social and content channels."},
-    {"title": "HR Executive", "department": "People", "location": "Delhi", "job_type": "Full-time", "description": "Manage recruitment coordination and employee onboarding."},
-    {"title": "Sales Development Rep", "department": "Sales", "location": "Bangalore", "job_type": "Full-time", "description": "Generate and qualify new business leads."},
-    {"title": "AI/ML Intern", "department": "Engineering", "location": "Remote", "job_type": "Internship", "description": "Prototype ML models for candidate screening and matching."},
-]
+from app.seed_data import SAMPLE_JOBS, _insert_sample_jobs
 
 
 def seed(force=False):
@@ -42,15 +33,7 @@ def seed(force=False):
         conn.execute("DELETE FROM jobs")
         print("Cleared existing jobs and candidates.")
 
-    now = datetime.now(timezone.utc).isoformat()
-    for job in SAMPLE_JOBS:
-        job["created_at"] = now
-    conn.executemany(
-        """INSERT INTO jobs (title, department, location, job_type, description, created_at)
-           VALUES (:title, :department, :location, :job_type, :description, :created_at)""",
-        SAMPLE_JOBS,
-    )
-    conn.commit()
+    _insert_sample_jobs(conn)
     conn.close()
     print(f"Seeded {len(SAMPLE_JOBS)} jobs into '{Config.DATABASE_PATH}'.")
 

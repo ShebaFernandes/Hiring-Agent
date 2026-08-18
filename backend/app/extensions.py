@@ -6,6 +6,7 @@ global connection we open one per request via Flask's `g` and close it in
 teardown_appcontext. Routes must call get_db() (not manage a connection
 directly) to get that per-request connection.
 """
+import os
 import sqlite3
 
 from flask import g
@@ -45,6 +46,10 @@ CREATE TABLE IF NOT EXISTS candidates (
 def init_db(app):
     global _database_path
     _database_path = app.config["DATABASE_PATH"]
+    # Make sure the directory holding the DB file exists (e.g. a mounted
+    # /data volume in production) before sqlite tries to create the file.
+    db_dir = os.path.dirname(os.path.abspath(_database_path))
+    os.makedirs(db_dir, exist_ok=True)
     with sqlite3.connect(_database_path) as conn:
         conn.executescript(SCHEMA)
 
