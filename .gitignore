@@ -1,0 +1,13 @@
+# Backend (Python)
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.env
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Frontend (Node) - frontend/.gitignore already covers node_modules/dist/.env
+
+# OS
+.DS_Store
+Thumbs.db
