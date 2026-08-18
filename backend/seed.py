@@ -6,16 +6,16 @@ Usage:
     python seed.py            # skip if jobs already exist
     python seed.py --force    # wipe jobs + candidates and reseed
 """
+import sqlite3
 import sys
 from datetime import datetime, timezone
 
-from pymongo import MongoClient
-
 from app.config import Config
+from app.extensions import SCHEMA
 
 SAMPLE_JOBS = [
     {"title": "Frontend Engineer", "department": "Engineering", "location": "Bangalore", "job_type": "Full-time", "description": "Build and maintain our React-based product UI."},
-    {"title": "Backend Engineer", "department": "Engineering", "location": "Remote", "job_type": "Full-time", "description": "Design and scale our Flask/MongoDB APIs."},
+    {"title": "Backend Engineer", "department": "Engineering", "location": "Remote", "job_type": "Full-time", "description": "Design and scale our Flask/SQLite APIs."},
     {"title": "Product Designer", "department": "Design", "location": "Mumbai", "job_type": "Full-time", "description": "Own end-to-end product design from research to polish."},
     {"title": "Data Analyst", "department": "Data", "location": "Remote", "job_type": "Full-time", "description": "Turn raw data into actionable business insights."},
     {"title": "DevOps Engineer", "department": "Engineering", "location": "Pune", "job_type": "Full-time", "description": "Own CI/CD pipelines and cloud infrastructure."},
@@ -28,24 +28,31 @@ SAMPLE_JOBS = [
 
 
 def seed(force=False):
-    client = MongoClient(Config.MONGO_URI)
-    db = client[Config.MONGO_DBNAME]
+    conn = sqlite3.connect(Config.DATABASE_PATH)
+    conn.executescript(SCHEMA)
 
-    existing = db.jobs.count_documents({})
+    existing = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
     if existing > 0 and not force:
         print(f"Skipping seed: {existing} job(s) already exist. Use --force to reset.")
+        conn.close()
         return
 
     if force:
-        db.jobs.delete_many({})
-        db.candidates.delete_many({})
+        conn.execute("DELETE FROM candidates")
+        conn.execute("DELETE FROM jobs")
         print("Cleared existing jobs and candidates.")
 
     now = datetime.now(timezone.utc).isoformat()
     for job in SAMPLE_JOBS:
         job["created_at"] = now
-    db.jobs.insert_many(SAMPLE_JOBS)
-    print(f"Seeded {len(SAMPLE_JOBS)} jobs into '{Config.MONGO_DBNAME}'.")
+    conn.executemany(
+        """INSERT INTO jobs (title, department, location, job_type, description, created_at)
+           VALUES (:title, :department, :location, :job_type, :description, :created_at)""",
+        SAMPLE_JOBS,
+    )
+    conn.commit()
+    conn.close()
+    print(f"Seeded {len(SAMPLE_JOBS)} jobs into '{Config.DATABASE_PATH}'.")
 
 
 if __name__ == "__main__":

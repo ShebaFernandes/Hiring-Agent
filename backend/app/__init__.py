@@ -4,7 +4,7 @@ from flask import Flask
 from flask_cors import CORS
 
 from .config import Config
-from .extensions import init_mongo, jwt
+from .extensions import close_db, init_db, jwt
 
 
 def create_app():
@@ -16,7 +16,8 @@ def create_app():
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     jwt.init_app(app)
-    init_mongo(app)
+    init_db(app)
+    app.teardown_appcontext(close_db)
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 

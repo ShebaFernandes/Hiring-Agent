@@ -2,11 +2,8 @@ import os
 import uuid
 from datetime import datetime, timezone
 
-from bson import ObjectId
-from bson.errors import InvalidId
 from flask import Blueprint, current_app, jsonify, request, send_from_directory
 from flask_jwt_extended import jwt_required
-from pymongo import ReturnDocument
 from werkzeug.utils import secure_filename
 
 from ..constants import ALLOWED_RESUME_EXTENSIONS, STAGES
@@ -14,6 +11,13 @@ from ..extensions import get_db
 from ..utils.serializers import serialize_candidate
 
 candidate_bp = Blueprint("candidates", __name__)
+
+
+def _parse_id(raw_id):
+    try:
+        return int(raw_id)
+    except (TypeError, ValueError):
+        return None
 
 
 def _allowed_resume(filename):
@@ -40,13 +44,12 @@ def apply():
     if not all([name, phone, email, job_id]):
         return jsonify({"error": "Name, phone, email and job are required"}), 400
 
-    try:
-        job_oid = ObjectId(job_id)
-    except InvalidId:
+    job_pk = _parse_id(job_id)
+    if job_pk is None:
         return jsonify({"error": "Invalid job selected"}), 400
 
     db = get_db()
-    job = db.jobs.find_one({"_id": job_oid})
+    job = db.execute("SELECT * FROM jobs WHERE id = ?", (job_pk,)).fetchone()
     if not job:
         return jsonify({"error": "Selected job does not exist"}), 404
 
@@ -64,11 +67,11 @@ def apply():
     os.makedirs(upload_dir, exist_ok=True)
     resume.save(os.path.join(upload_dir, stored_filename))
 
-    doc = {
+    fields = {
         "name": name,
         "phone": phone,
         "email": email,
-        "job_id": job_oid,
+        "job_id": job_pk,
         "job_title": job["title"],
         "note": note,
         "resume_filename": stored_filename,
@@ -76,9 +79,20 @@ def apply():
         "stage": "Applied",
         "applied_at": datetime.now(timezone.utc).isoformat(),
     }
-    result = db.candidates.insert_one(doc)
-    doc["_id"] = result.inserted_id
-    return jsonify(serialize_candidate(doc)), 201
+    cursor = db.execute(
+        """INSERT INTO candidates
+               (name, phone, email, job_id, job_title, note, resume_filename,
+                resume_original_name, stage, applied_at)
+           VALUES
+               (:name, :phone, :email, :job_id, :job_title, :note, :resume_filename,
+                :resume_original_name, :stage, :applied_at)""",
+        fields,
+    )
+    db.commit()
+    candidate = db.execute(
+        "SELECT * FROM candidates WHERE id = ?", (cursor.lastrowid,)
+    ).fetchone()
+    return jsonify(serialize_candidate(candidate)), 201
 
 
 @candidate_bp.get("/admin/candidates")
@@ -86,31 +100,38 @@ def apply():
 def list_candidates():
     """Supports optional ?job_id=...&stage=... filters used by the dashboard."""
     db = get_db()
-    query = {}
+    clauses = []
+    params = {}
 
     job_id = request.args.get("job_id")
     if job_id:
-        try:
-            query["job_id"] = ObjectId(job_id)
-        except InvalidId:
+        job_pk = _parse_id(job_id)
+        if job_pk is None:
             return jsonify({"error": "Invalid job id"}), 400
+        clauses.append("job_id = :job_id")
+        params["job_id"] = job_pk
 
     stage = request.args.get("stage")
     if stage:
         if stage not in STAGES:
             return jsonify({"error": f"Invalid stage. Must be one of {STAGES}"}), 400
-        query["stage"] = stage
+        clauses.append("stage = :stage")
+        params["stage"] = stage
 
-    candidates = db.candidates.find(query).sort("applied_at", -1)
+    query = "SELECT * FROM candidates"
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY applied_at DESC"
+
+    candidates = db.execute(query, params).fetchall()
     return jsonify([serialize_candidate(c) for c in candidates])
 
 
 @candidate_bp.patch("/admin/candidates/<candidate_id>/stage")
 @jwt_required()
 def update_stage(candidate_id):
-    try:
-        oid = ObjectId(candidate_id)
-    except InvalidId:
+    candidate_pk = _parse_id(candidate_id)
+    if candidate_pk is None:
         return jsonify({"error": "Invalid candidate id"}), 400
 
     data = request.get_json(silent=True) or {}
@@ -119,24 +140,30 @@ def update_stage(candidate_id):
         return jsonify({"error": f"Stage must be one of {STAGES}"}), 400
 
     db = get_db()
-    updated = db.candidates.find_one_and_update(
-        {"_id": oid}, {"$set": {"stage": stage}}, return_document=ReturnDocument.AFTER
+    result = db.execute(
+        "UPDATE candidates SET stage = ? WHERE id = ?", (stage, candidate_pk)
     )
-    if not updated:
+    db.commit()
+    if result.rowcount == 0:
         return jsonify({"error": "Candidate not found"}), 404
-    return jsonify(serialize_candidate(updated))
+
+    candidate = db.execute(
+        "SELECT * FROM candidates WHERE id = ?", (candidate_pk,)
+    ).fetchone()
+    return jsonify(serialize_candidate(candidate))
 
 
 @candidate_bp.get("/admin/candidates/<candidate_id>/resume")
 @jwt_required()
 def download_resume(candidate_id):
-    try:
-        oid = ObjectId(candidate_id)
-    except InvalidId:
+    candidate_pk = _parse_id(candidate_id)
+    if candidate_pk is None:
         return jsonify({"error": "Invalid candidate id"}), 400
 
     db = get_db()
-    candidate = db.candidates.find_one({"_id": oid})
+    candidate = db.execute(
+        "SELECT * FROM candidates WHERE id = ?", (candidate_pk,)
+    ).fetchone()
     if not candidate:
         return jsonify({"error": "Candidate not found"}), 404
 
@@ -145,7 +172,7 @@ def download_resume(candidate_id):
         upload_dir,
         candidate["resume_filename"],
         as_attachment=True,
-        download_name=candidate.get("resume_original_name") or "resume",
+        download_name=candidate["resume_original_name"] or "resume",
     )
 
 

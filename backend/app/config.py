@@ -11,8 +11,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Config:
-    MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-    MONGO_DBNAME = os.getenv("MONGO_DBNAME", "hiring_agent")
+    DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join(BASE_DIR, "hiring_agent.db"))
 
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=12)
