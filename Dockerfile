@@ -26,4 +26,6 @@ WORKDIR /app/backend
 EXPOSE 8000
 
 # $PORT is provided by the host (Render/Railway); default to 8000 locally.
-CMD gunicorn run:app --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120
+# --preload loads the app once in the master (running the startup auto-seed a
+# single time) before forking workers, so jobs can't be seeded twice.
+CMD gunicorn run:app --bind 0.0.0.0:${PORT:-8000} --workers 2 --preload --timeout 120
