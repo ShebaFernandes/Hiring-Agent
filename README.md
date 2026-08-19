@@ -104,7 +104,7 @@ Same Dockerfile. Create a service from the repo, add a **Volume mounted at `/dat
 
 ```
 Email:    admin@enter.in
-Password: admin123
+Password: Enter@Hiring2026
 ```
 
 Change these via `ADMIN_EMAIL` / `ADMIN_PASSWORD` (env vars in production, `backend/.env` locally).
